@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 26
+  productGUID: 6b9318918f4a4a27ba4c745e1fbd1873
+  productName: Alice // Clockwork Sky
+  companyName: Wonderland Flight Bureau
+  defaultScreenWidth: 1280
+  defaultScreenHeight: 720
+  defaultScreenWidthWeb: 960
+  defaultScreenHeightWeb: 540
+  runInBackground: 1
+  usePlayerLog: 1
+  colorSpace: 0
+  fullscreenMode: 3
+  useDefaultScreenWidth: 1
+  useDefaultScreenHeight: 1
+  defaultIsNativeResolution: 1
+  resizableWindow: 1
+  bundleVersion: 1.0.0
+  scriptingBackend:
+    Standalone: 1
+  apiCompatibilityLevelPerPlatform: {}
+  m_ScriptingDefineSymbols: {}
+  allowUnsafeCode: 0
+  useDeterministicCompilation: 1
+  useHDRDisplay: 0
+  webGLInitialMemorySize: 32
+  webGLMaximumMemorySize: 2048
+  webGLMemoryGrowthMode: 2
+  webGLMemoryLinearGrowthStep: 16
+  webGLMemoryGeometricGrowthStep: 0.2
+  webGLMemoryGeometricGrowthCap: 96
+  webGLPowerPreference: 2

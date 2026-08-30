@@ -1,0 +1,10 @@
+{
+  "name": "alice-clockwork-sky",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A dependency-free Alice-inspired side-scrolling shooter.",
+  "scripts": {
+    "check": "node --check game.js",
+    "serve": "python -m http.server 8080"
+  }
+}
