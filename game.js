@@ -31,6 +31,22 @@
     night: "#11112a", deep: "#0a0920", lavender: "#8474b6", mist: "#cbc2e5", gold: "#f7ca6f",
     pink: "#f296b8", red: "#dd567b", mint: "#8ce8c4", blue: "#8cc7ff", ink: "#251839", cream: "#fff4d8"
   };
+  const POWER_DEFINITIONS = [
+    { key: "speed", label: "SPEED", cap: 3 },
+    { key: "missile", label: "MISSILE", cap: 2 },
+    { key: "double", label: "DOUBLE", cap: 1 },
+    { key: "laser", label: "LASER", cap: 1 },
+    { key: "option", label: "OPTION", cap: 3 },
+    { key: "shield", label: "SHIELD", cap: 1 }
+  ];
+  const MODE_LIVES = { story: 3, garden: 5 };
+  const ENEMY_DEFINITIONS = {
+    card: { radius: 15, health: 2.4, speed: 135, score: 90, healthGrowth: .45, speedGrowth: 14, spawnOffset: 55, yRange: [60, H - 60], shotRange: [1, 2] },
+    hare: { radius: 19, health: 4.4, speed: 105, score: 175, healthGrowth: 1, speedGrowth: 9, spawnOffset: 60, yRange: [80, H - 80], shotRange: [.65, 1.45], usesBaseY: true },
+    teapot: { radius: 25, health: 8, speed: 62, score: 300, healthGrowth: 1.4, speedGrowth: 0, spawnOffset: 62, yRange: [75, H - 75], shotRange: [.7, 1.4] },
+    cat: { radius: 30, health: 13, speed: 74, score: 520, healthGrowth: 2, speedGrowth: 0, spawnOffset: 70, yRange: [100, H - 100], shotRange: [1.2, 1.2], usesBaseY: true },
+    queen: { radius: 68, health: 290, speed: 88, score: 8000, spawnOffset: 150, boss: true, shotDelay: 1.5 }
+  };
 
   function loadSave() {
     try {
@@ -50,6 +66,26 @@
   function choose(items) { return items[Math.floor(Math.random() * items.length)]; }
   function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
   function active(code) { return keys.has(code) || touchKeys.has(code); }
+  function createUpgrades() { return Object.fromEntries(POWER_DEFINITIONS.map(({ key }) => [key, 0])); }
+  function createEnemy(type, x, y, difficulty = 0) {
+    const definition = ENEMY_DEFINITIONS[type];
+    const enemy = {
+      type,
+      x,
+      y,
+      r: definition.radius,
+      hp: definition.health + difficulty * (definition.healthGrowth || 0),
+      maxHp: definition.health,
+      vx: definition.speed + difficulty * (definition.speedGrowth || 0),
+      vy: 0,
+      phase: definition.boss ? 0 : random(0, 7),
+      value: definition.score,
+      shot: definition.shotDelay ?? random(...definition.shotRange)
+    };
+    if (definition.usesBaseY) enemy.baseY = y;
+    if (definition.boss) Object.assign(enemy, { boss: true, pattern: 0, entered: false });
+    return enemy;
+  }
 
   const audio = {
     context: null,
@@ -97,7 +133,7 @@
     hero: null,
     stats: { kills: 0, capsules: 0, shots: 0, grazes: 0 },
     powerCursor: -1,
-    upgrades: { speed: 0, missile: 0, double: 0, laser: 0, option: 0, shield: 0 },
+    upgrades: createUpgrades(),
     init() {
       this.stars = Array.from({ length: 90 }, () => ({ x: random(0, W), y: random(0, H), size: random(.5, 2.5), speed: random(.15, 1.15), color: choose([palette.cream, palette.blue, palette.lavender]) }));
       this.ribbons = Array.from({ length: 11 }, (_, index) => ({ x: index * 115 + random(-30, 30), y: random(300, 500), scale: random(.5, 1.2), color: index % 2 ? "#503b74" : "#2e315e" }));
@@ -112,8 +148,8 @@
       this.enemies = []; this.shots = []; this.enemyShots = []; this.pickups = []; this.particles = [];
       this.stats = { kills: 0, capsules: 0, shots: 0, grazes: 0 };
       this.powerCursor = -1;
-      this.upgrades = { speed: 0, missile: 0, double: 0, laser: 0, option: 0, shield: 0 };
-      const lives = mode === "garden" ? 5 : 3;
+      this.upgrades = createUpgrades();
+      const lives = MODE_LIVES[mode] ?? MODE_LIVES.story;
       this.hero = { x: 155, y: H / 2, r: 15, speed: 255, hp: 3, lives, invincible: 2.2, fireTimer: 0, missileTimer: 0, shieldTimer: 0, optionAngle: 0, hitPulse: 0 };
       this.hidePanels(); this.updateHud(); this.updatePower(); this.setStatus("TEA GARDENへの降下を開始。時計うさぎを追え。");
       UI.boss.hidden = true; audio.wake(); audio.beep("power");
@@ -194,40 +230,53 @@
       const difficulty = 1 + this.stageTime / 55;
       const roll = Math.random();
       if (roll < .38) {
-        const y = random(60, H - 60); const count = Math.random() < .45 ? 2 : 1;
-        for (let index = 0; index < count; index++) this.enemies.push({ type: "card", x: W + 55 + index * 64, y: clamp(y + index * 42, 40, H - 40), r: 15, hp: 2.4 + difficulty * .45, maxHp: 2.4, vx: 135 + difficulty * 14, vy: 0, phase: random(0, 7), value: 90, shot: random(1, 2) });
+        const definition = ENEMY_DEFINITIONS.card;
+        const y = random(...definition.yRange); const count = Math.random() < .45 ? 2 : 1;
+        for (let index = 0; index < count; index++) this.enemies.push(createEnemy("card", W + definition.spawnOffset + index * 64, clamp(y + index * 42, 40, H - 40), difficulty));
       } else if (roll < .72) {
-        this.enemies.push({ type: "hare", x: W + 60, y: random(80, H - 80), baseY: 0, r: 19, hp: 4.4 + difficulty, maxHp: 4.4, vx: 105 + difficulty * 9, vy: 0, phase: random(0, 7), value: 175, shot: random(.65, 1.45) });
-        this.enemies[this.enemies.length - 1].baseY = this.enemies[this.enemies.length - 1].y;
+        const definition = ENEMY_DEFINITIONS.hare;
+        this.enemies.push(createEnemy("hare", W + definition.spawnOffset, random(...definition.yRange), difficulty));
       } else if (roll < .91) {
-        this.enemies.push({ type: "teapot", x: W + 62, y: random(75, H - 75), r: 25, hp: 8 + difficulty * 1.4, maxHp: 8, vx: 62, vy: 0, phase: random(0, 7), value: 300, shot: random(.7, 1.4) });
+        const definition = ENEMY_DEFINITIONS.teapot;
+        this.enemies.push(createEnemy("teapot", W + definition.spawnOffset, random(...definition.yRange), difficulty));
       } else {
-        this.enemies.push({ type: "cat", x: W + 70, y: random(100, H - 100), baseY: 0, r: 30, hp: 13 + difficulty * 2, maxHp: 13, vx: 74, vy: 0, phase: random(0, 7), value: 520, shot: 1.2 });
-        this.enemies[this.enemies.length - 1].baseY = this.enemies[this.enemies.length - 1].y;
+        const definition = ENEMY_DEFINITIONS.cat;
+        this.enemies.push(createEnemy("cat", W + definition.spawnOffset, random(...definition.yRange), difficulty));
       }
     },
     startBoss() {
       this.bossStarted = true; this.setStatus("警報：赤の女王がティーガーデンを封鎖した。"); showToast("BOSS APPROACHING — RED QUEEN"); audio.beep("warning");
-      this.enemies.push({ type: "queen", boss: true, x: W + 150, y: H / 2, r: 68, hp: 290, maxHp: 290, vx: 88, vy: 0, phase: 0, value: 8000, shot: 1.5, pattern: 0, entered: false });
+      this.enemies.push(createEnemy("queen", W + ENEMY_DEFINITIONS.queen.spawnOffset, H / 2));
       UI.boss.hidden = false;
     },
     updateEnemies(dt) {
       const h = this.hero;
       for (const enemy of this.enemies) {
         enemy.phase += dt;
-        if (enemy.type === "card") { enemy.x -= enemy.vx * dt; enemy.y += Math.sin(enemy.phase * 2.5) * 28 * dt; }
-        if (enemy.type === "hare") { enemy.x -= enemy.vx * dt; enemy.y = enemy.baseY + Math.sin(enemy.phase * 2.5) * 52; }
-        if (enemy.type === "teapot") { enemy.x -= enemy.vx * dt; enemy.y += Math.sin(enemy.phase * 1.8) * 13 * dt; }
-        if (enemy.type === "cat") { enemy.x -= enemy.vx * dt; enemy.y = enemy.baseY + Math.sin(enemy.phase * 1.7) * 78; }
-        if (enemy.type === "queen") { if (!enemy.entered) { enemy.x -= enemy.vx * dt; if (enemy.x < 770) enemy.entered = true; } else { enemy.x = 770 + Math.sin(enemy.phase * .65) * 36; enemy.y = H / 2 + Math.sin(enemy.phase * 1.25) * 112; } }
+        this.moveEnemy(enemy, dt);
         enemy.shot -= dt;
         if (enemy.shot <= 0 && (enemy.x < W - 6 || enemy.boss)) {
           this.enemyFire(enemy, h);
-          const base = enemy.boss ? .82 : enemy.type === "teapot" ? 1.7 : 1.3;
-          enemy.shot = base / (enemy.boss ? 1 + (1 - enemy.hp / enemy.maxHp) * .85 : 1);
+          enemy.shot = this.enemyShotDelay(enemy);
         }
       }
       this.enemies = this.enemies.filter((enemy) => enemy.x > -130 && enemy.hp > 0);
+    },
+    moveEnemy(enemy, dt) {
+      switch (enemy.type) {
+        case "card": enemy.x -= enemy.vx * dt; enemy.y += Math.sin(enemy.phase * 2.5) * 28 * dt; break;
+        case "hare": enemy.x -= enemy.vx * dt; enemy.y = enemy.baseY + Math.sin(enemy.phase * 2.5) * 52; break;
+        case "teapot": enemy.x -= enemy.vx * dt; enemy.y += Math.sin(enemy.phase * 1.8) * 13 * dt; break;
+        case "cat": enemy.x -= enemy.vx * dt; enemy.y = enemy.baseY + Math.sin(enemy.phase * 1.7) * 78; break;
+        case "queen":
+          if (!enemy.entered) { enemy.x -= enemy.vx * dt; if (enemy.x < 770) enemy.entered = true; }
+          else { enemy.x = 770 + Math.sin(enemy.phase * .65) * 36; enemy.y = H / 2 + Math.sin(enemy.phase * 1.25) * 112; }
+          break;
+      }
+    },
+    enemyShotDelay(enemy) {
+      if (!enemy.boss) return enemy.type === "teapot" ? 1.7 : 1.3;
+      return .82 / (1 + (1 - enemy.hp / enemy.maxHp) * .85);
     },
     enemyFire(enemy, hero) {
       const angle = Math.atan2(hero.y - enemy.y, hero.x - enemy.x);
@@ -248,7 +297,7 @@
       for (const shot of this.shots) {
         shot.life -= dt;
         if (shot.kind === "missile") {
-          const target = this.enemies.filter((enemy) => enemy.x > shot.x - 20).sort((a, b) => dist(a.x, a.y, shot.x, shot.y) - dist(b.x, b.y, shot.x, shot.y))[0];
+          const target = this.findMissileTarget(shot);
           if (target) shot.vy += clamp(target.y - shot.y, -170, 170) * dt * 1.8;
           shot.vy = clamp(shot.vy, -260, 260);
         }
@@ -257,6 +306,16 @@
       for (const shot of this.enemyShots) { shot.life -= dt; shot.x += shot.vx * dt; shot.y += shot.vy * dt; }
       this.shots = this.shots.filter((shot) => shot.life > 0 && shot.x < W + 80 && shot.y > -70 && shot.y < H + 70);
       this.enemyShots = this.enemyShots.filter((shot) => shot.life > 0 && shot.x > -70 && shot.x < W + 70 && shot.y > -70 && shot.y < H + 70);
+    },
+    findMissileTarget(shot) {
+      let target = null;
+      let nearestDistance = Infinity;
+      for (const enemy of this.enemies) {
+        if (enemy.x <= shot.x - 20) continue;
+        const distance = dist(enemy.x, enemy.y, shot.x, shot.y);
+        if (distance < nearestDistance) { target = enemy; nearestDistance = distance; }
+      }
+      return target;
     },
     updatePickups(dt) {
       for (const pickup of this.pickups) { pickup.x -= 95 * dt; pickup.y += Math.sin((pickup.phase += dt) * 4) * 18 * dt; pickup.spin += dt * 3; }
@@ -302,10 +361,10 @@
     activatePower() {
       if (this.state !== "playing") return;
       if (this.powerCursor < 0) { showToast("先に TEA CAPSULE を集めよう"); return; }
-      const power = ["speed", "missile", "double", "laser", "option", "shield"][this.powerCursor];
-      if (power === "shield") { this.hero.shieldTimer = 12; this.upgrades.shield = 1; }
-      else { const caps = { speed: 3, missile: 2, double: 1, laser: 1, option: 3 }; this.upgrades[power] = Math.min(caps[power], this.upgrades[power] + 1); }
-      this.powerCursor = -1; this.spark(this.hero.x, this.hero.y, 20, palette.mint, 145); this.shake = save.settings.shake ? .18 : 0; this.setStatus(`${power.toUpperCase()} を発動。もっと深く落ちていこう。`); this.updatePower(); audio.beep("power");
+      const power = POWER_DEFINITIONS[this.powerCursor];
+      if (power.key === "shield") { this.hero.shieldTimer = 12; this.upgrades.shield = 1; }
+      else this.upgrades[power.key] = Math.min(power.cap, this.upgrades[power.key] + 1);
+      this.powerCursor = -1; this.spark(this.hero.x, this.hero.y, 20, palette.mint, 145); this.shake = save.settings.shake ? .18 : 0; this.setStatus(`${power.label} を発動。もっと深く落ちていこう。`); this.updatePower(); audio.beep("power");
       if (this.upgrades.option >= 3) this.unlock("THREE GRINS", "チェシャ猫オプションを3機揃えた");
       if (this.upgrades.laser && this.upgrades.missile && this.upgrades.option >= 2) this.unlock("FULL TEA SET", "強化されたティーセットを完成させた");
     },
@@ -320,10 +379,9 @@
     setStatus(text) { UI.status.textContent = text; },
     updateHud() { const h = this.hero; UI.score.textContent = fmt(this.score); UI.best.textContent = fmt(Math.max(save.best, this.score)); UI.stage.textContent = this.bossStarted ? "01 · RED QUEEN" : "01 · TEA GARDEN"; UI.lives.textContent = h ? "♥ ".repeat(Math.max(0, h.lives)).trim() || "—" : "♥ ♥ ♥"; },
     updatePower() {
-      const names = ["speed", "missile", "double", "laser", "option", "shield"];
-      UI.cells.forEach((cell, index) => { const name = names[index]; cell.classList.toggle("ready", this.powerCursor === index); cell.classList.toggle("owned", name === "shield" ? (this.hero?.shieldTimer > 0) : this.upgrades[name] > 0); });
+      UI.cells.forEach((cell, index) => { const power = POWER_DEFINITIONS[index]; cell.classList.toggle("ready", this.powerCursor === index); cell.classList.toggle("owned", power.key === "shield" ? (this.hero?.shieldTimer > 0) : this.upgrades[power.key] > 0); });
       if (this.powerCursor < 0) UI.powerTip.textContent = "CAPSULEを取って能力を選択";
-      else UI.powerTip.textContent = `${names[this.powerCursor].toUpperCase()} 点灯中 — SHIFT / K で発動`;
+      else UI.powerTip.textContent = `${POWER_DEFINITIONS[this.powerCursor].label} 点灯中 — SHIFT / K で発動`;
     },
     updateBossHud() {
       const queen = this.enemies.find((enemy) => enemy.boss);

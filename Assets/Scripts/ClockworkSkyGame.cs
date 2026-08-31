@@ -22,6 +22,36 @@ namespace WonderlandFlight
         private enum EnemyKind { Card, Hare, Teapot, Cat, Queen }
         private enum ShotKind { Tea, Double, Laser, Missile, Enemy, Heart }
 
+        private struct EnemyProfile
+        {
+            public float Radius;
+            public float Health;
+            public float Speed;
+            public int Score;
+            public bool IsBoss;
+
+            public EnemyProfile(float radius, float health, float speed, int score, bool isBoss = false)
+            {
+                Radius = radius;
+                Health = health;
+                Speed = speed;
+                Score = score;
+                IsBoss = isBoss;
+            }
+        }
+
+        private struct PowerDefinition
+        {
+            public string Label;
+            public int Cap;
+
+            public PowerDefinition(string label, int cap)
+            {
+                Label = label;
+                Cap = cap;
+            }
+        }
+
         private sealed class Actor
         {
             public GameObject Node;
@@ -92,6 +122,23 @@ namespace WonderlandFlight
         private const string MotionKey = "clockwork.motion";
         private const string ContrastKey = "clockwork.contrast";
         private const string MementoKey = "clockwork.mementos";
+        private static readonly PowerDefinition[] PowerDefinitions =
+        {
+            new PowerDefinition("SPEED", 3),
+            new PowerDefinition("MISSILE", 2),
+            new PowerDefinition("DOUBLE", 1),
+            new PowerDefinition("LASER", 1),
+            new PowerDefinition("OPTION", 3),
+            new PowerDefinition("SHIELD", 1)
+        };
+        private static readonly EnemyProfile[] EnemyProfiles =
+        {
+            new EnemyProfile(.26f, 2.8f, 2.1f, 90),
+            new EnemyProfile(.36f, 4.8f, 1.6f, 175),
+            new EnemyProfile(.48f, 8.5f, .92f, 300),
+            new EnemyProfile(.58f, 14f, 1.05f, 520),
+            new EnemyProfile(1.25f, 290f, 1.4f, 8000, true)
+        };
 
         private readonly List<Actor> enemies = new List<Actor>();
         private readonly List<Shot> friendlyShots = new List<Shot>();
@@ -275,8 +322,8 @@ namespace WonderlandFlight
                 }
             }
             UpdateEnemies(dt);
-            UpdateShots(friendlyShots, dt, true);
-            UpdateShots(enemyShots, dt, false);
+            UpdateShots(friendlyShots, dt);
+            UpdateShots(enemyShots, dt);
             UpdateCapsules(dt);
             UpdateParticles(dt);
             CheckCollisions();
@@ -306,6 +353,14 @@ namespace WonderlandFlight
         private void StartRun(bool garden)
         {
             ClearRunObjects();
+            ResetRunState(garden);
+            player = CreatePlayer();
+            status = "TEA GARDENへの降下を開始。時計うさぎを追え。";
+            Beep(560f, .1f, .05f);
+        }
+
+        private void ResetRunState(bool garden)
+        {
             gardenMode = garden;
             state = State.Playing;
             score = 0;
@@ -323,9 +378,6 @@ namespace WonderlandFlight
             shieldTimer = 0f;
             speedLevel = missileLevel = doubleLevel = laserLevel = optionLevel = 0;
             powerCursor = -1;
-            player = CreatePlayer();
-            status = "TEA GARDENへの降下を開始。時計うさぎを追え。";
-            Beep(560f, .1f, .05f);
         }
 
         private void ClearRunObjects()
@@ -396,15 +448,21 @@ namespace WonderlandFlight
 
         private void SpawnEnemy(EnemyKind kind, Vector2 position)
         {
-            var actor = new Actor { Kind = kind, Position = position, BaseY = position.y, Phase = UnityEngine.Random.Range(0f, 7f), Cooldown = UnityEngine.Random.Range(.65f, 1.35f) };
-            switch (kind)
+            var profile = EnemyProfiles[(int)kind];
+            var actor = new Actor
             {
-                case EnemyKind.Card: actor.Radius = .26f; actor.Health = actor.MaxHealth = 2.8f; actor.Speed = 2.1f; actor.Score = 90; break;
-                case EnemyKind.Hare: actor.Radius = .36f; actor.Health = actor.MaxHealth = 4.8f; actor.Speed = 1.6f; actor.Score = 175; break;
-                case EnemyKind.Teapot: actor.Radius = .48f; actor.Health = actor.MaxHealth = 8.5f; actor.Speed = .92f; actor.Score = 300; break;
-                case EnemyKind.Cat: actor.Radius = .58f; actor.Health = actor.MaxHealth = 14f; actor.Speed = 1.05f; actor.Score = 520; break;
-                case EnemyKind.Queen: actor.Radius = 1.25f; actor.Health = actor.MaxHealth = 290f; actor.Speed = 1.4f; actor.Score = 8000; actor.Boss = true; actor.Cooldown = 1.6f; break;
-            }
+                Kind = kind,
+                Position = position,
+                BaseY = position.y,
+                Phase = UnityEngine.Random.Range(0f, 7f),
+                Cooldown = kind == EnemyKind.Queen ? 1.6f : UnityEngine.Random.Range(.65f, 1.35f),
+                Radius = profile.Radius,
+                Health = profile.Health,
+                MaxHealth = profile.Health,
+                Speed = profile.Speed,
+                Score = profile.Score,
+                Boss = profile.IsBoss
+            };
             actor.Node = CreateEnemyVisual(actor);
             actor.Sprite = actor.Node.GetComponentInChildren<SpriteRenderer>();
             enemies.Add(actor);
@@ -455,24 +513,58 @@ namespace WonderlandFlight
             {
                 var enemy = enemies[index];
                 enemy.Phase += dt;
-                if (enemy.Kind == EnemyKind.Card) { enemy.Position += Vector2.left * enemy.Speed * dt; enemy.Position.y += Mathf.Sin(enemy.Phase * 3f) * .45f * dt; }
-                else if (enemy.Kind == EnemyKind.Hare) { enemy.Position.x -= enemy.Speed * dt; enemy.Position.y = enemy.BaseY + Mathf.Sin(enemy.Phase * 2.5f) * .9f; }
-                else if (enemy.Kind == EnemyKind.Teapot) { enemy.Position.x -= enemy.Speed * dt; enemy.Position.y += Mathf.Sin(enemy.Phase * 2f) * .16f * dt; }
-                else if (enemy.Kind == EnemyKind.Cat) { enemy.Position.x -= enemy.Speed * dt; enemy.Position.y = enemy.BaseY + Mathf.Sin(enemy.Phase * 1.7f) * 1.1f; }
-                else if (enemy.Kind == EnemyKind.Queen)
-                {
-                    if (!enemy.Entered) { enemy.Position.x -= enemy.Speed * dt; if (enemy.Position.x < 5.8f) enemy.Entered = true; }
-                    else { enemy.Position.x = 5.8f + Mathf.Sin(enemy.Phase * .65f) * .32f; enemy.Position.y = Mathf.Sin(enemy.Phase * 1.25f) * 2.0f; }
-                }
+                MoveEnemy(enemy, dt);
                 enemy.Node.transform.position = enemy.Position;
                 enemy.Cooldown -= dt;
                 if (enemy.Cooldown <= 0f && (enemy.Position.x < 8.2f || enemy.Boss))
                 {
                     EnemyFire(enemy);
-                    enemy.Cooldown = enemy.Boss ? Mathf.Lerp(.88f, .5f, 1f - enemy.Health / enemy.MaxHealth) : (enemy.Kind == EnemyKind.Teapot ? 1.65f : 1.24f);
+                    enemy.Cooldown = NextEnemyCooldown(enemy);
                 }
                 if (enemy.Position.x < -9.5f || enemy.Health <= 0f) RemoveEnemy(index, false);
             }
+        }
+
+        private static void MoveEnemy(Actor enemy, float dt)
+        {
+            switch (enemy.Kind)
+            {
+                case EnemyKind.Card:
+                    enemy.Position += Vector2.left * enemy.Speed * dt;
+                    enemy.Position.y += Mathf.Sin(enemy.Phase * 3f) * .45f * dt;
+                    break;
+                case EnemyKind.Hare:
+                    enemy.Position.x -= enemy.Speed * dt;
+                    enemy.Position.y = enemy.BaseY + Mathf.Sin(enemy.Phase * 2.5f) * .9f;
+                    break;
+                case EnemyKind.Teapot:
+                    enemy.Position.x -= enemy.Speed * dt;
+                    enemy.Position.y += Mathf.Sin(enemy.Phase * 2f) * .16f * dt;
+                    break;
+                case EnemyKind.Cat:
+                    enemy.Position.x -= enemy.Speed * dt;
+                    enemy.Position.y = enemy.BaseY + Mathf.Sin(enemy.Phase * 1.7f) * 1.1f;
+                    break;
+                case EnemyKind.Queen:
+                    if (!enemy.Entered)
+                    {
+                        enemy.Position.x -= enemy.Speed * dt;
+                        if (enemy.Position.x < 5.8f) enemy.Entered = true;
+                    }
+                    else
+                    {
+                        enemy.Position.x = 5.8f + Mathf.Sin(enemy.Phase * .65f) * .32f;
+                        enemy.Position.y = Mathf.Sin(enemy.Phase * 1.25f) * 2.0f;
+                    }
+                    break;
+            }
+        }
+
+        private static float NextEnemyCooldown(Actor enemy)
+        {
+            return enemy.Boss
+                ? Mathf.Lerp(.88f, .5f, 1f - enemy.Health / enemy.MaxHealth)
+                : enemy.Kind == EnemyKind.Teapot ? 1.65f : 1.24f;
         }
 
         private void EnemyFire(Actor enemy)
@@ -521,7 +613,7 @@ namespace WonderlandFlight
             if (friendly) friendlyShots.Add(shot); else enemyShots.Add(shot);
         }
 
-        private void UpdateShots(List<Shot> shots, float dt, bool friendly)
+        private void UpdateShots(List<Shot> shots, float dt)
         {
             for (var index = shots.Count - 1; index >= 0; index--)
             {
@@ -529,20 +621,26 @@ namespace WonderlandFlight
                 shot.Lifetime -= dt;
                 if (shot.Kind == ShotKind.Missile)
                 {
-                    Actor target = null;
-                    var nearest = float.MaxValue;
-                    foreach (var enemy in enemies)
-                    {
-                        if (enemy.Position.x < shot.Position.x - .3f) continue;
-                        var d = Vector2.Distance(shot.Position, enemy.Position);
-                        if (d < nearest) { nearest = d; target = enemy; }
-                    }
+                    var target = FindMissileTarget(shot.Position);
                     if (target != null) shot.Velocity += (target.Position - shot.Position).normalized * 7f * dt;
                 }
                 shot.Position += shot.Velocity * dt;
                 shot.Node.transform.position = shot.Position;
                 if (shot.Lifetime <= 0f || Mathf.Abs(shot.Position.x) > 10f || Mathf.Abs(shot.Position.y) > 6f) RemoveShot(shots, index);
             }
+        }
+
+        private Actor FindMissileTarget(Vector2 position)
+        {
+            Actor target = null;
+            var nearest = float.MaxValue;
+            foreach (var enemy in enemies)
+            {
+                if (enemy.Position.x < position.x - .3f) continue;
+                var distance = Vector2.Distance(position, enemy.Position);
+                if (distance < nearest) { nearest = distance; target = enemy; }
+            }
+            return target;
         }
 
         private void UpdateCapsules(float dt)
@@ -636,9 +734,9 @@ namespace WonderlandFlight
         {
             capsuleCount++;
             score += 250;
-            powerCursor = Mathf.Min(5, powerCursor + 1);
+            powerCursor = Mathf.Min(PowerDefinitions.Length - 1, powerCursor + 1);
             status = "TEA CAPSULE を獲得。SHIFTで強化を選択。";
-            ShowToast("POWER READY — " + PowerNames()[powerCursor]);
+            ShowToast("POWER READY — " + PowerDefinitions[powerCursor].Label);
             SpawnParticles(playerPosition, 14, Ink.Primary, 1.4f);
             Beep(720f, .08f, .045f);
             if (capsuleCount >= 7) UnlockMemento("CURIOUS COLLECTOR");
@@ -648,17 +746,18 @@ namespace WonderlandFlight
         {
             if (state != State.Playing) return;
             if (powerCursor < 0) { ShowToast("先に TEA CAPSULE を集めよう"); return; }
+            var power = PowerDefinitions[powerCursor];
             switch (powerCursor)
             {
-                case 0: speedLevel = Mathf.Min(3, speedLevel + 1); break;
-                case 1: missileLevel = Mathf.Min(2, missileLevel + 1); break;
-                case 2: doubleLevel = 1; break;
-                case 3: laserLevel = 1; break;
-                case 4: optionLevel = Mathf.Min(3, optionLevel + 1); break;
+                case 0: speedLevel = Mathf.Min(power.Cap, speedLevel + 1); break;
+                case 1: missileLevel = Mathf.Min(power.Cap, missileLevel + 1); break;
+                case 2: doubleLevel = power.Cap; break;
+                case 3: laserLevel = power.Cap; break;
+                case 4: optionLevel = Mathf.Min(power.Cap, optionLevel + 1); break;
                 case 5: shieldTimer = 12f; break;
             }
-            status = PowerNames()[powerCursor] + " を発動。もっと深く落ちていこう。";
-            ShowToast(PowerNames()[powerCursor] + " ACTIVATED");
+            status = power.Label + " を発動。もっと深く落ちていこう。";
+            ShowToast(power.Label + " ACTIVATED");
             powerCursor = -1;
             SpawnParticles(playerPosition, 20, Ink.Success, 1.9f);
             Beep(520f, .16f, .065f);
@@ -747,7 +846,20 @@ namespace WonderlandFlight
 
         private static void SafeDestroy(GameObject node) { if (node != null) UnityEngine.Object.Destroy(node); }
         private static void RemoveShot(List<Shot> shots, int index) { if (index < 0 || index >= shots.Count) return; SafeDestroy(shots[index].Node); shots.RemoveAt(index); }
-        private string[] PowerNames() { return new[] { "SPEED", "MISSILE", "DOUBLE", "LASER", "OPTION", "SHIELD" }; }
+
+        private bool IsPowerOwned(int index)
+        {
+            switch (index)
+            {
+                case 0: return speedLevel > 0;
+                case 1: return missileLevel > 0;
+                case 2: return doubleLevel > 0;
+                case 3: return laserLevel > 0;
+                case 4: return optionLevel > 0;
+                case 5: return shieldTimer > 0f;
+                default: return false;
+            }
+        }
 
         private void OnGUI()
         {
@@ -809,17 +921,16 @@ namespace WonderlandFlight
 
         private void DrawPower(float width, float height)
         {
-            var names = PowerNames();
             var panel = new Rect(width * .17f, height - 99, width * .66f, 39);
             DrawRect(panel, new Color(Ink.Surface.r, Ink.Surface.g, Ink.Surface.b, .94f));
-            var cellWidth = panel.width / names.Length;
-            for (var index = 0; index < names.Length; index++)
+            var cellWidth = panel.width / PowerDefinitions.Length;
+            for (var index = 0; index < PowerDefinitions.Length; index++)
             {
                 var ready = index == powerCursor;
-                var owned = (index == 0 && speedLevel > 0) || (index == 1 && missileLevel > 0) || (index == 2 && doubleLevel > 0) || (index == 3 && laserLevel > 0) || (index == 4 && optionLevel > 0) || (index == 5 && shieldTimer > 0f);
+                var owned = IsPowerOwned(index);
                 var color = ready ? Ink.Primary : owned ? Ink.PrimaryContainer : Ink.SurfaceRaised;
                 DrawRect(new Rect(panel.x + index * cellWidth + 2, panel.y + 3, cellWidth - 4, panel.height - 6), color);
-                Label(new Rect(panel.x + index * cellWidth, panel.y + 11, cellWidth, 17), names[index], 10, ready ? Ink.OnPrimary : Ink.OnSurface, TextAnchor.MiddleCenter, FontStyle.Bold);
+                Label(new Rect(panel.x + index * cellWidth, panel.y + 11, cellWidth, 17), PowerDefinitions[index].Label, 10, ready ? Ink.OnPrimary : Ink.OnSurface, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
             if (ActionButton(new Rect(panel.x + panel.width + 8, panel.y, 117, 39), "SHIFT / K\nPOWER")) ActivatePower();
         }
