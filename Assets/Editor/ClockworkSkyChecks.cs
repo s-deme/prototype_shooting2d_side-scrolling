@@ -13,6 +13,7 @@ public static class ClockworkSkyChecks
         var host = new GameObject("Clockwork Sky checks");
         var game = host.AddComponent<ClockworkSkyGame>();
         var pieces = new List<GameObject>();
+        var stars = (List<GameObject>)Field(game, "stars");
         var randomState = UnityEngine.Random.state;
         Sprite sprite = null;
         try
@@ -33,7 +34,6 @@ public static class ClockworkSkyChecks
             for (int i = 0; i < angles.Length; i++)
                 Require(Vector2.Distance((Vector2)Call(game, "Rotate", Vector2.right, angles[i]), expected[i]) < .00001f, "rotation " + angles[i]);
             Call(game, "CreateStars");
-            var stars = (List<GameObject>)Field(game, "stars");
             Require(stars.Count == 70, "star count");
             foreach (GameObject star in stars)
             {
@@ -51,7 +51,7 @@ public static class ClockworkSkyChecks
         finally
         {
             foreach (GameObject piece in pieces) UnityEngine.Object.DestroyImmediate(piece);
-            foreach (GameObject star in (List<GameObject>)Field(game, "stars")) UnityEngine.Object.DestroyImmediate(star);
+            foreach (GameObject star in stars) UnityEngine.Object.DestroyImmediate(star);
             if (sprite != null) { UnityEngine.Object.DestroyImmediate(sprite.texture); UnityEngine.Object.DestroyImmediate(sprite); }
             UnityEngine.Object.DestroyImmediate(host);
             UnityEngine.Random.state = randomState;
