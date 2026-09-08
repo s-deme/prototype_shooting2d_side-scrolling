@@ -40,6 +40,10 @@
     { key: "shield", label: "SHIELD", cap: 1 }
   ];
   const MODE_LIVES = { story: 3, garden: 5 };
+  const SOUND_PRESETS = {
+    shot: [410, .035, "square", .025], hit: [110, .075, "sawtooth", .035], collect: [720, .08, "sine", .045],
+    power: [520, .16, "triangle", .06], boom: [70, .19, "sawtooth", .06], warning: [190, .12, "square", .045], win: [880, .23, "sine", .07]
+  };
   const ENEMY_DEFINITIONS = {
     card: { radius: 15, health: 2.4, speed: 135, score: 90, healthGrowth: .45, speedGrowth: 14, spawnOffset: 55, yRange: [60, H - 60], shotRange: [1, 2] },
     hare: { radius: 19, health: 4.4, speed: 105, score: 175, healthGrowth: 1, speedGrowth: 9, spawnOffset: 60, yRange: [80, H - 80], shotRange: [.65, 1.45], usesBaseY: true },
@@ -77,7 +81,6 @@
       hp: definition.health + difficulty * (definition.healthGrowth || 0),
       maxHp: definition.health,
       vx: definition.speed + difficulty * (definition.speedGrowth || 0),
-      vy: 0,
       phase: definition.boss ? 0 : random(0, 7),
       value: definition.score,
       shot: definition.shotDelay ?? random(...definition.shotRange)
@@ -99,11 +102,7 @@
     beep(kind) {
       if (!save.settings.sound || !this.context) return;
       const now = this.context.currentTime;
-      const presets = {
-        shot: [410, .035, "square", .025], hit: [110, .075, "sawtooth", .035], collect: [720, .08, "sine", .045],
-        power: [520, .16, "triangle", .06], boom: [70, .19, "sawtooth", .06], warning: [190, .12, "square", .045], win: [880, .23, "sine", .07]
-      };
-      const [frequency, duration, type, volume] = presets[kind] || presets.shot;
+      const [frequency, duration, type, volume] = SOUND_PRESETS[kind] || SOUND_PRESETS.shot;
       const oscillator = this.context.createOscillator();
       const gain = this.context.createGain();
       oscillator.type = type; oscillator.frequency.setValueAtTime(frequency, now);
@@ -117,11 +116,9 @@
   const game = {
     state: "title",
     mode: "story",
-    elapsed: 0,
     stageTime: 0,
     world: 0,
     spawnTimer: .7,
-    ambientTimer: 0,
     statusTimer: 0,
     score: 0,
     shake: 0,
@@ -131,7 +128,7 @@
     enemies: [], shots: [], enemyShots: [], pickups: [], particles: [], ribbons: [],
     stars: [],
     hero: null,
-    stats: { kills: 0, capsules: 0, shots: 0, grazes: 0 },
+    stats: { kills: 0, capsules: 0, grazes: 0 },
     powerCursor: -1,
     upgrades: createUpgrades(),
     init() {
@@ -143,14 +140,14 @@
     reset(mode = selectedMode) {
       this.mode = mode;
       this.state = "playing";
-      this.elapsed = 0; this.stageTime = 0; this.world = 0; this.spawnTimer = .8; this.ambientTimer = 0; this.statusTimer = 0;
+      this.stageTime = 0; this.world = 0; this.spawnTimer = .8; this.statusTimer = 0;
       this.score = 0; this.shake = 0; this.flash = 0; this.bossStarted = false; this.clearDelay = 0;
       this.enemies = []; this.shots = []; this.enemyShots = []; this.pickups = []; this.particles = [];
-      this.stats = { kills: 0, capsules: 0, shots: 0, grazes: 0 };
+      this.stats = { kills: 0, capsules: 0, grazes: 0 };
       this.powerCursor = -1;
       this.upgrades = createUpgrades();
       const lives = MODE_LIVES[mode] ?? MODE_LIVES.story;
-      this.hero = { x: 155, y: H / 2, r: 15, speed: 255, hp: 3, lives, invincible: 2.2, fireTimer: 0, missileTimer: 0, shieldTimer: 0, optionAngle: 0, hitPulse: 0 };
+      this.hero = { x: 155, y: H / 2, r: 15, speed: 255, hp: 3, lives, invincible: 2.2, fireTimer: 0, missileTimer: 0, shieldTimer: 0, optionAngle: 0 };
       this.hidePanels(); this.updateHud(); this.updatePower(); this.setStatus("TEA GARDENへの降下を開始。時計うさぎを追え。");
       UI.boss.hidden = true; audio.wake(); audio.beep("power");
     },
@@ -189,7 +186,7 @@
       this.stars.forEach((star) => { star.x -= star.speed * dt * (this.state === "playing" ? 80 : 18); if (star.x < -4) { star.x = W + 4; star.y = random(0, H); } });
       if (this.state !== "playing") { this.updateParticles(dt); return; }
       const h = this.hero;
-      this.elapsed += dt; this.stageTime += dt; h.fireTimer -= dt; h.missileTimer -= dt; h.invincible = Math.max(0, h.invincible - dt); h.hitPulse = Math.max(0, h.hitPulse - dt); h.shieldTimer = Math.max(0, h.shieldTimer - dt);
+      this.stageTime += dt; h.fireTimer -= dt; h.missileTimer -= dt; h.invincible = Math.max(0, h.invincible - dt); h.shieldTimer = Math.max(0, h.shieldTimer - dt);
       let dx = 0; let dy = 0;
       if (active("ArrowLeft") || active("KeyA") || active("left")) dx--;
       if (active("ArrowRight") || active("KeyD") || active("right")) dx++;
@@ -208,7 +205,7 @@
       const h = this.hero;
       const rate = Math.max(.078, .19 - this.upgrades.speed * .019);
       if (h.fireTimer > 0) return;
-      h.fireTimer = rate; this.stats.shots++;
+      h.fireTimer = rate;
       const originX = h.x + 19; const originY = h.y;
       this.shots.push({ x: originX, y: originY, vx: 620, vy: 0, w: 17, h: 5, damage: this.upgrades.laser ? 2.6 : 1.15, kind: this.upgrades.laser ? "laser" : "shot", life: 1.65, pierce: this.upgrades.laser ? 2 : 0, tint: this.upgrades.laser ? palette.mint : palette.gold });
       if (this.upgrades.double) {
@@ -233,15 +230,10 @@
         const definition = ENEMY_DEFINITIONS.card;
         const y = random(...definition.yRange); const count = Math.random() < .45 ? 2 : 1;
         for (let index = 0; index < count; index++) this.enemies.push(createEnemy("card", W + definition.spawnOffset + index * 64, clamp(y + index * 42, 40, H - 40), difficulty));
-      } else if (roll < .72) {
-        const definition = ENEMY_DEFINITIONS.hare;
-        this.enemies.push(createEnemy("hare", W + definition.spawnOffset, random(...definition.yRange), difficulty));
-      } else if (roll < .91) {
-        const definition = ENEMY_DEFINITIONS.teapot;
-        this.enemies.push(createEnemy("teapot", W + definition.spawnOffset, random(...definition.yRange), difficulty));
       } else {
-        const definition = ENEMY_DEFINITIONS.cat;
-        this.enemies.push(createEnemy("cat", W + definition.spawnOffset, random(...definition.yRange), difficulty));
+        const type = roll < .72 ? "hare" : roll < .91 ? "teapot" : "cat";
+        const definition = ENEMY_DEFINITIONS[type];
+        this.enemies.push(createEnemy(type, W + definition.spawnOffset, random(...definition.yRange), difficulty));
       }
     },
     startBoss() {
@@ -334,8 +326,9 @@
         }
       }
       for (const bullet of this.enemyShots) {
-        if (dist(bullet.x, bullet.y, h.x, h.y) < bullet.r + h.r) { bullet.life = 0; this.damageHero(); }
-        else if (dist(bullet.x, bullet.y, h.x, h.y) < bullet.r + h.r + 20) { this.stats.grazes++; if (this.stats.grazes % 14 === 0) { this.addScore(30); this.setStatus("ギリギリのティータイム！ GRAZE +30"); } }
+        const distance = dist(bullet.x, bullet.y, h.x, h.y);
+        if (distance < bullet.r + h.r) { bullet.life = 0; this.damageHero(); }
+        else if (distance < bullet.r + h.r + 20) { this.stats.grazes++; if (this.stats.grazes % 14 === 0) { this.addScore(30); this.setStatus("ギリギリのティータイム！ GRAZE +30"); } }
       }
       for (const enemy of this.enemies) if (!enemy.boss && dist(enemy.x, enemy.y, h.x, h.y) < enemy.r + h.r) { enemy.hp = 0; this.destroyEnemy(enemy); this.damageHero(); }
       for (const pickup of this.pickups) if (dist(pickup.x, pickup.y, h.x, h.y) < 29) { pickup.x = -100; this.collectPickup(); }
@@ -350,7 +343,7 @@
       const h = this.hero;
       if (h.invincible > 0) return;
       if (h.shieldTimer > 0) { h.shieldTimer = Math.max(0, h.shieldTimer - 2.8); h.invincible = .45; this.setStatus("ティーカップの盾が攻撃を弾いた！"); this.spark(h.x, h.y, 12, palette.blue, 120); audio.beep("hit"); return; }
-      h.hp--; h.invincible = 2.1; h.hitPulse = 1; this.shake = save.settings.shake ? .52 : 0; this.flash = .32; this.explosion(h.x, h.y, 16, palette.pink); audio.beep("boom");
+      h.hp--; h.invincible = 2.1; this.shake = save.settings.shake ? .52 : 0; this.flash = .32; this.explosion(h.x, h.y, 16, palette.pink); audio.beep("boom");
       if (h.hp <= 0) { h.lives--; if (h.lives <= 0) { this.end(false); return; } h.hp = 3; h.x = 145; h.y = H / 2; this.setStatus("アリス・クラフトを雲から回収。飛行再開！"); }
       this.updateHud();
     },
@@ -435,9 +428,9 @@
       ctx.fillStyle = palette.pink; ctx.beginPath(); ctx.moveTo(-10, -10); ctx.lineTo(-3, -27); ctx.lineTo(2, -10); ctx.moveTo(-8, 10); ctx.lineTo(-1, 25); ctx.lineTo(4, 10); ctx.fill();
       ctx.fillStyle = palette.ink; ctx.beginPath(); ctx.arc(6, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = palette.gold; ctx.beginPath(); ctx.arc(7, 0, 4, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = palette.mint; ctx.fillRect(-27, -5, 9, 10); ctx.restore();
-      for (let i = 0; i < this.upgrades.option; i++) { const pos = this.optionPosition(i); this.drawOption(pos.x, pos.y, i); }
+      for (let i = 0; i < this.upgrades.option; i++) { const pos = this.optionPosition(i); this.drawOption(pos.x, pos.y); }
     },
-    drawOption(x, y, index) { ctx.save(); ctx.translate(x, y); ctx.fillStyle = "#e7e7ff"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = palette.blue; ctx.beginPath(); ctx.arc(-3, -2, 2, 0, Math.PI * 2); ctx.arc(3, -2, 2, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = palette.pink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 1, 4, .2, Math.PI - .2); ctx.stroke(); ctx.restore(); },
+    drawOption(x, y) { ctx.save(); ctx.translate(x, y); ctx.fillStyle = "#e7e7ff"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = palette.blue; ctx.beginPath(); ctx.arc(-3, -2, 2, 0, Math.PI * 2); ctx.arc(3, -2, 2, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = palette.pink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 1, 4, .2, Math.PI - .2); ctx.stroke(); ctx.restore(); },
     drawShots() {
       for (const shot of this.shots) { ctx.save(); ctx.translate(shot.x, shot.y); if (shot.kind === "missile") { ctx.fillStyle = shot.tint; ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-7, -5); ctx.lineTo(-4, 0); ctx.lineTo(-7, 5); ctx.closePath(); ctx.fill(); ctx.fillStyle = palette.gold; ctx.fillRect(-10, -2, 5, 4); } else { ctx.globalAlpha = .8; ctx.fillStyle = shot.tint; ctx.shadowColor = shot.tint; ctx.shadowBlur = shot.kind === "laser" ? 12 : 6; ctx.fillRect(-shot.w / 2, -shot.h / 2, shot.w, shot.h); if (shot.kind === "laser") { ctx.globalAlpha = .45; ctx.fillRect(-shot.w / 2 - 10, -1, shot.w + 15, 2); } } ctx.restore(); }
       for (const shot of this.enemyShots) { ctx.save(); ctx.translate(shot.x, shot.y); ctx.fillStyle = shot.color; ctx.shadowColor = shot.color; ctx.shadowBlur = 8; if (shot.kind === "heart") { ctx.rotate(Math.atan2(shot.vy, shot.vx) + Math.PI / 2); ctx.beginPath(); ctx.moveTo(0, shot.r); ctx.bezierCurveTo(-shot.r * 1.5, 0, -shot.r, -shot.r, 0, -shot.r * .35); ctx.bezierCurveTo(shot.r, -shot.r, shot.r * 1.5, 0, 0, shot.r); ctx.fill(); } else { ctx.beginPath(); ctx.arc(0, 0, shot.r, 0, Math.PI * 2); ctx.fill(); if (shot.kind === "watch") { ctx.strokeStyle = palette.ink; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -3); ctx.stroke(); } } ctx.restore(); }
@@ -475,7 +468,7 @@
   $("#resultTitleButton").addEventListener("click", () => game.showTitle());
   $("#resumeButton").addEventListener("click", () => game.togglePause());
   $("#quitButton").addEventListener("click", () => game.showTitle());
-  $("#helpButton").addEventListener("click", () => { if (game.state !== "playing") UI.help.hidden = false; else { game.togglePause(); UI.help.hidden = false; } });
+  $("#helpButton").addEventListener("click", () => { if (game.state === "playing") game.togglePause(); UI.help.hidden = false; });
   $("#settingsButton").addEventListener("click", () => { if (game.state === "playing") game.togglePause(); UI.settings.hidden = false; });
   $$("[data-close]").forEach((button) => button.addEventListener("click", () => closePanel(button.dataset.close)));
   $("#activateButton").addEventListener("click", () => game.activatePower());

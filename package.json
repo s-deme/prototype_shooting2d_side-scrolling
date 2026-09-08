@@ -4,7 +4,7 @@
   "private": true,
   "description": "A dependency-free Alice-inspired side-scrolling shooter.",
   "scripts": {
-    "check": "node --check game.js",
+    "check": "node --check game.js && node tests/game-smoke.cjs",
     "serve": "python -m http.server 8080"
   }
 }

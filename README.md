@@ -65,10 +65,10 @@ Web版の設定画面からブラウザのフルスクリーン表示を切り�
 
 ## 開発時チェック
 
-Web版はNode.jsで構文を確認します。
+Web版はNode.jsで構文と敵生成・衝突判定のスモークテストを確認します。
 
 ```powershell
 npm run check
 ```
 
-Unity版は `Assets/Scenes/ClockworkSky.unity` をPlayして主要フローを確認した後、対象プラットフォームのPlayer buildでも入力と保存を確認してください。
+Unity版は `Clockwork Sky > Run Smoke Checks` で描画オブジェクト生成・回転・リセットを確認できます。その後 `Assets/Scenes/ClockworkSky.unity` をPlayして主要フローを確認し、対象プラットフォームのPlayer buildでも入力と保存を確認してください。

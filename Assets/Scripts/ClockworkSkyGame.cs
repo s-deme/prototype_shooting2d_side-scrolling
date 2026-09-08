@@ -55,7 +55,6 @@ namespace WonderlandFlight
         private sealed class Actor
         {
             public GameObject Node;
-            public SpriteRenderer Sprite;
             public EnemyKind Kind;
             public Vector2 Position;
             public float Radius;
@@ -87,7 +86,6 @@ namespace WonderlandFlight
         private sealed class Particle
         {
             public GameObject Node;
-            public SpriteRenderer Sprite;
             public Vector2 Velocity;
             public float Lifetime;
             public float Scale;
@@ -231,7 +229,10 @@ namespace WonderlandFlight
             for (var index = 0; index < 70; index++)
             {
                 var star = MakePiece("Star", new Vector2(UnityEngine.Random.Range(-9f, 9f), UnityEngine.Random.Range(-5f, 5f)), new Vector2(UnityEngine.Random.Range(.015f, .045f), UnityEngine.Random.Range(.015f, .045f)), index % 3 == 0 ? Ink.Info : Ink.OnSurfaceVariant, -4);
-                star.GetComponent<SpriteRenderer>().color = new Color(star.GetComponent<SpriteRenderer>().color.r, star.GetComponent<SpriteRenderer>().color.g, star.GetComponent<SpriteRenderer>().color.b, UnityEngine.Random.Range(.25f, .85f));
+                var renderer = star.GetComponent<SpriteRenderer>();
+                var color = renderer.color;
+                color.a = UnityEngine.Random.Range(.25f, .85f);
+                renderer.color = color;
                 stars.Add(star);
             }
         }
@@ -464,7 +465,6 @@ namespace WonderlandFlight
                 Boss = profile.IsBoss
             };
             actor.Node = CreateEnemyVisual(actor);
-            actor.Sprite = actor.Node.GetComponentInChildren<SpriteRenderer>();
             enemies.Add(actor);
         }
 
@@ -792,7 +792,7 @@ namespace WonderlandFlight
             for (var index = 0; index < count; index++)
             {
                 var node = MakePiece("Spark", position, Vector2.one * UnityEngine.Random.Range(.035f, .09f), color, 5);
-                particles.Add(new Particle { Node = node, Sprite = node.GetComponent<SpriteRenderer>(), Velocity = UnityEngine.Random.insideUnitCircle * speed, Lifetime = UnityEngine.Random.Range(.25f, .65f), Scale = node.transform.localScale.x });
+                particles.Add(new Particle { Node = node, Velocity = UnityEngine.Random.insideUnitCircle * speed, Lifetime = UnityEngine.Random.Range(.25f, .65f), Scale = node.transform.localScale.x });
             }
         }
 
@@ -828,14 +828,16 @@ namespace WonderlandFlight
         private static Vector2 Rotate(Vector2 vector, float degrees)
         {
             var radians = degrees * Mathf.Deg2Rad;
-            return new Vector2(vector.x * Mathf.Cos(radians) - vector.y * Mathf.Sin(radians), vector.x * Mathf.Sin(radians) + vector.y * Mathf.Cos(radians));
+            var cosine = Mathf.Cos(radians);
+            var sine = Mathf.Sin(radians);
+            return new Vector2(vector.x * cosine - vector.y * sine, vector.x * sine + vector.y * cosine);
         }
 
         private GameObject MakePiece(string name, Vector2 position, Vector2 scale, Color color, int order, Transform parent = null)
         {
             var node = new GameObject(name);
             if (parent != null) node.transform.SetParent(parent, false);
-            node.transform.localPosition = parent == null ? new Vector3(position.x, position.y, 0f) : new Vector3(position.x, position.y, 0f);
+            node.transform.localPosition = new Vector3(position.x, position.y, 0f);
             node.transform.localScale = new Vector3(scale.x, scale.y, 1f);
             var renderer = node.AddComponent<SpriteRenderer>();
             renderer.sprite = squareSprite;
@@ -943,7 +945,7 @@ namespace WonderlandFlight
             Label(new Rect(panel.x, panel.y + 37, panel.width, 24), "THE CLOCK HAS PAUSED", 13, Ink.OnSurfaceVariant, TextAnchor.MiddleCenter, FontStyle.Bold);
             Label(new Rect(panel.x, panel.y + 76, panel.width, 52), "ひとやすみ。", 36, Ink.OnSurface, TextAnchor.MiddleCenter, FontStyle.Normal);
             if (ActionButton(new Rect(panel.x + 36, panel.y + 145, panel.width - 72, 43), "▶ RESUME FLIGHT")) Resume();
-            if (Button(new Rect(panel.x + 36, panel.y + 195, panel.width - 72, 32), "TITLE SCREEN", false)) { ClearRunObjects(); state = State.Title; }
+            if (Button(new Rect(panel.x + 36, panel.y + 195, panel.width - 72, 32), "TITLE SCREEN", false)) ReturnToTitle();
         }
 
         private void DrawResults(float width, float height)
@@ -957,7 +959,7 @@ namespace WonderlandFlight
             Label(new Rect(panel.x + 44, panel.y + 120, panel.width - 88, 40), victory ? "女王の命令は砕け、ティーガーデンに風が戻った。" : "強化の順番を考えて、もう一度お茶会へ。", 14, Ink.OnSurfaceVariant, TextAnchor.MiddleCenter, FontStyle.Normal);
             Label(new Rect(panel.x + 40, panel.y + 179, panel.width - 80, 25), "SCORE " + score.ToString("000000") + "    CARDS " + kills + "    CAPSULES " + capsuleCount, 14, Ink.Primary, TextAnchor.MiddleCenter, FontStyle.Bold);
             if (ActionButton(new Rect(panel.x + 43, panel.y + 237, panel.width - 86, 43), "▶ FLY AGAIN")) StartRun(gardenMode);
-            if (Button(new Rect(panel.x + 43, panel.y + 288, panel.width - 86, 31), "TITLE SCREEN", false)) { ClearRunObjects(); state = State.Title; }
+            if (Button(new Rect(panel.x + 43, panel.y + 288, panel.width - 86, 31), "TITLE SCREEN", false)) ReturnToTitle();
         }
 
         private void DrawHelp(float width, float height)
@@ -993,6 +995,12 @@ namespace WonderlandFlight
             var rect = new Rect(width * .5f - 180, height * .18f, 360, 35);
             DrawRect(rect, new Color(Ink.SurfaceRaised.r, Ink.SurfaceRaised.g, Ink.SurfaceRaised.b, .96f));
             Label(rect, value, 13, Ink.Primary, TextAnchor.MiddleCenter, FontStyle.Bold);
+        }
+
+        private void ReturnToTitle()
+        {
+            ClearRunObjects();
+            state = State.Title;
         }
 
         private void OpenHelp()
