@@ -4,7 +4,7 @@
 
 ## Unity版（推奨）
 
-1. Unity Hubからこのフォルダを **Unity 2022.3.62f1** として開きます。
+1. Unity Hubからこのフォルダを **Unity 2022.3.62f3** として開きます。
 2. `Assets/Scenes/ClockworkSky.unity` を開いて **Play** を押します。カメラ・背景・ゲーム本体・HUDを自動で生成します。
 
 ### Unity版の操作
